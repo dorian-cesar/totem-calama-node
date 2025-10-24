@@ -1,7 +1,10 @@
 import mysql from 'mysql2/promise'
 import usb from 'usb'
 import axios from 'axios'
-import { InputDevice, listDevices } from 'evdev'
+//import { InputDevice, listDevices } from 'evdev'
+
+import evdev from 'evdev';
+const { InputDevice, listDevices } = evdev;
 
 // ---------------- CONFIG ----------------
 
