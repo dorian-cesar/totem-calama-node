@@ -1,12 +1,12 @@
 import mysql from 'mysql2/promise'
 import usb from 'usb'
-import HID from 'node-hid'
+import iohook from 'iohook'
 import axios from 'axios'
 
 // ---------------- CONFIG ----------------
 
 const DB_CONFIG = {
-  host: 'ls-ac361eb6981fc8da3000dad63b382c39e5f1f3cd.cylsiewx0zgx.us-east-1.rds.amazonaws.com',
+  host: 'ls-ac361eb6981fc8da3000dad63b382c39e5Qf1f3cd.cylsiewx0zgx.us-east-1.rds.amazonaws.com',
   user: 'dbmasteruser',
   password: 'CP7>2fobZp<7Kja!Efy3Q+~g:as2]rJD',
   database: 'parkingAndenes'
@@ -20,7 +20,7 @@ const PRINTER_PRODUCT_ID = 0x5743
 
 // ---------------- FUNCIONES ----------------
 
-// 🔍 Mostrar listado de dispositivos USB
+// Mostrar listado de dispositivos USB (opcional)
 function listUsbDevices() {
   console.log('\n🔌 Dispositivos USB detectados:')
   const devices = usb.getDeviceList()
@@ -28,27 +28,12 @@ function listUsbDevices() {
   devices.forEach((device, index) => {
     const desc = device.deviceDescriptor
     console.log(
-      `#${index + 1} → VendorID: 0x${desc.idVendor.toString(16).padStart(4, '0')} | ` +
-      `ProductID: 0x${desc.idProduct.toString(16).padStart(4, '0')}`
+      `#${index + 1} → VendorID: 0x${desc.idVendor.toString(16).padStart(4,'0')} | ` +
+      `ProductID: 0x${desc.idProduct.toString(16).padStart(4,'0')}`
     )
   })
 
   console.log(`Total detectados: ${devices.length}\n`)
-}
-
-// Buscar un teclado HID
-function findUsbKeyboard() {
-  const devices = HID.devices()
-  const keyboard = devices.find(d =>
-    d.product && d.product.toLowerCase().includes('keyboard')
-  )
-  if (keyboard) {
-    console.log(`✅ Dispositivo detectado: ${keyboard.product}`)
-    return new HID.HID(keyboard.path)
-  } else {
-    console.log('❌ No se detectó un teclado USB.')
-    return null
-  }
 }
 
 // Obtener la última patente con estado 'Ingresado'
@@ -73,6 +58,7 @@ async function updateParkingStatus(idmov) {
 }
 
 // Imprimir ticket con KR403
+import HID from 'node-hid' // Para abrir la impresora
 function printTicket(patente) {
   const printer = usb.findByIds(PRINTER_VENDOR_ID, PRINTER_PRODUCT_ID)
   if (!printer) {
@@ -120,33 +106,27 @@ async function callApi() {
   }
 }
 
-// Escuchar tecla del teclado
-function listenForButton(device) {
-  console.log('⌨️ Esperando pulsación del botón...')
-  device.on('data', async data => {
-    console.log('🔘 Botón presionado, procesando...')
-
-    const entry = await getLatestParkingEntry()
-    if (entry) {
-      const { idmov, patente } = entry
-      console.log(`Última patente ingresada: ${patente}`)
-      printTicket(patente)
-      await updateParkingStatus(idmov)
-      console.log("✅ Estado actualizado a 'Insite'")
-      await callApi()
-    } else {
-      console.log('⚠️ No hay registros con estado "Ingresado".')
-    }
-  })
-}
-
 // ---------------- MAIN ----------------
 
-// Muestra listado de todos los dispositivos conectados
 listUsbDevices()
 
-// Luego busca un teclado y comienza a escuchar
-const keyboard = findUsbKeyboard()
-if (keyboard) {
-  listenForButton(keyboard)
-}
+console.log('🖱️ Esperando clic del mouse...')
+
+// Captura cualquier clic de mouse con iohook
+iohook.on('mousedown', async event => {
+  console.log('🔘 Mouse clic detectado → procesando flujo parking...')
+
+  const entry = await getLatestParkingEntry()
+  if (entry) {
+    const { idmov, patente } = entry
+    console.log(`Última patente ingresada: ${patente}`)
+    printTicket(patente)
+    await updateParkingStatus(idmov)
+    console.log("✅ Estado actualizado a 'Insite'")
+    await callApi()
+  } else {
+    console.log('⚠️ No hay registros con estado "Ingresado".')
+  }
+})
+
+iohook.start()
