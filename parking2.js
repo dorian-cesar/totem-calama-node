@@ -1,7 +1,7 @@
 import mysql from 'mysql2/promise'
 import usb from 'usb'
-import iohook from 'iohook'
 import axios from 'axios'
+import { InputDevice, listDevices } from 'evdev'
 
 // ---------------- CONFIG ----------------
 
@@ -20,7 +20,7 @@ const PRINTER_PRODUCT_ID = 0x5743
 
 // ---------------- FUNCIONES ----------------
 
-// 🔌 Mostrar listado de dispositivos USB conectados
+// 🔌 Mostrar listado de dispositivos USB
 function listUsbDevices() {
   console.log('\n🔌 Dispositivos USB detectados:')
   const devices = usb.getDeviceList()
@@ -28,8 +28,8 @@ function listUsbDevices() {
   devices.forEach((device, index) => {
     const desc = device.deviceDescriptor
     console.log(
-      `#${index + 1} → VendorID: 0x${desc.idVendor.toString(16).padStart(4,'0')} | ` +
-      `ProductID: 0x${desc.idProduct.toString(16).padStart(4,'0')}`
+      `#${index + 1} → VendorID: 0x${desc.idVendor.toString(16).padStart(4, '0')} | ` +
+      `ProductID: 0x${desc.idProduct.toString(16).padStart(4, '0')}`
     )
   })
 
@@ -105,45 +105,58 @@ async function callApi() {
   }
 }
 
+// ---------------- INPUT ----------------
+
+// Escuchar un dispositivo de entrada (teclado o mouse)
+function listenDevice(device, type) {
+  console.log(`⌨️ / 🖱️ Esperando eventos del ${type}...`)
+
+  device.on('keypress', async event => {
+    console.log(`🔘 Evento de ${type}: keypress`, event)
+
+    const entry = await getLatestParkingEntry()
+    if (entry) {
+      const { idmov, patente } = entry
+      console.log(`Última patente ingresada: ${patente}`)
+      printTicket(patente)
+      await updateParkingStatus(idmov)
+      console.log("✅ Estado actualizado a 'Insite'")
+      await callApi()
+    } else {
+      console.log('⚠️ No hay registros con estado "Ingresado".')
+    }
+  })
+
+  device.on('click', async event => {
+    console.log(`🖱️ Click del ${type}:`, event)
+    const entry = await getLatestParkingEntry()
+    if (entry) {
+      const { idmov, patente } = entry
+      console.log(`Última patente ingresada: ${patente}`)
+      printTicket(patente)
+      await updateParkingStatus(idmov)
+      console.log("✅ Estado actualizado a 'Insite'")
+      await callApi()
+    }
+  })
+}
+
 // ---------------- MAIN ----------------
 
+// Listar todos los dispositivos USB
 listUsbDevices()
 
-console.log('⌨️ + 🖱️ Esperando pulsaciones de teclado o clics de mouse...')
+// Listar dispositivos de entrada (teclado / mouse)
+const devices = listDevices()
 
-// ---- Captura cualquier tecla presionada ----
-iohook.on('keydown', async event => {
-  console.log('🔘 Tecla presionada, procesando flujo parking...')
-
-  const entry = await getLatestParkingEntry()
-  if (entry) {
-    const { idmov, patente } = entry
-    console.log(`Última patente ingresada: ${patente}`)
-    printTicket(patente)
-    await updateParkingStatus(idmov)
-    console.log("✅ Estado actualizado a 'Insite'")
-    await callApi()
-  } else {
-    console.log('⚠️ No hay registros con estado "Ingresado".')
+devices.forEach(d => {
+  const name = d.name.toLowerCase()
+  if (name.includes('keyboard')) {
+    const dev = new InputDevice(d.path)
+    listenDevice(dev, 'teclado')
+  }
+  if (name.includes('mouse')) {
+    const dev = new InputDevice(d.path)
+    listenDevice(dev, 'mouse')
   }
 })
-
-// ---- Captura cualquier clic de mouse ----
-iohook.on('mousedown', async event => {
-  console.log('🔘 Mouse clic detectado, procesando flujo parking...')
-
-  const entry = await getLatestParkingEntry()
-  if (entry) {
-    const { idmov, patente } = entry
-    console.log(`Última patente ingresada: ${patente}`)
-    printTicket(patente)
-    await updateParkingStatus(idmov)
-    console.log("✅ Estado actualizado a 'Insite'")
-    await callApi()
-  } else {
-    console.log('⚠️ No hay registros con estado "Ingresado".')
-  }
-})
-
-// Iniciar iohook
-iohook.start()
